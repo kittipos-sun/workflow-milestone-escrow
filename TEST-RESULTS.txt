@@ -1,0 +1,26 @@
+Local EVM verification (not Sepolia deployment)
+Compiler: 0.8.34+commit.80d5c536.Emscripten.clang
+EVM: Shanghai; optimizer: 200 runs
+PASS Deployer is admin
+PASS Reject invalid jobs and unknown IDs
+PASS Creation records agreement without funding
+PASS Reject unauthorized and incorrect deposits
+PASS Reject submission, approval and dispute before funding
+PASS Funding locks exact amount and rejects repeat deposit
+PASS Reject wrong sender, empty evidence and premature approval
+PASS Submission records evidence and timestamp
+PASS Approval pays exactly once and emits payment event
+PASS Reject duplicate release/refund and post-completion disputes
+PASS Admin cannot settle a non-disputed job
+PASS Dispute freezes normal workflow and allows both parties evidence
+PASS Admin refund pays employer and prevents repeat settlement
+PASS Freelancer dispute can result in full payment
+PASS Concurrent jobs maintain separate balances
+PASS Late submissions allowed; no timed automatic release
+PASS Direct ETH transfers are rejected
+PASS Failed transfer rolls back status and escrow
+PASS Retry after recipient accepts pays once
+PASS Authorized callback cannot reenter settlement
+PASS History can be reconstructed from event logs
+
+21 test groups passed.
