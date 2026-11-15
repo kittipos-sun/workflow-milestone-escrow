@@ -302,10 +302,10 @@ export default function App() {
 
   return <div className="shell">
     <aside className="sidebar">
-      <a className="brand" href={`#/${activeMode}`}><span className="brand-icon">W</span><span><b>WorkFlow</b><small>FREELANCE ESCROW</small></span></a>
-      <div className="network-label"><i className="live"/> Sepolia Testnet</div>
+      <a className="brand" href={`#/${activeMode}`} aria-label="WorkFlow กลับไปหน้าแดชบอร์ด"><span className="brand-icon">W</span><span><b>WorkFlow</b><small>Freelance Escrow</small></span></a>
+      <div className="network-label" aria-label="เชื่อมต่อเครือข่าย Sepolia Testnet"><i className="live"/> Sepolia Testnet</div>
       <p className="nav-caption">{roleName}</p>
-      {activeMode && <nav>
+      {activeMode && <nav aria-label={`เมนู${roleName}`}>
         <NavItem icon="▦" label="แดชบอร์ด" active={section === "dashboard" && !id} onClick={() => goSection("dashboard")}/>
         {activeMode === "employer" && <NavItem icon="＋" label="สร้างงาน" active={section === "create"} onClick={() => goSection("create")}/>}
         <NavItem icon="⚖" label="ข้อพิพาท" active={section === "disputes"} onClick={() => goSection("disputes")}/>
@@ -314,8 +314,8 @@ export default function App() {
       <div className="sidebar-foot"><div className="account-mini"><span className="avatar">{account.slice(2, 4).toUpperCase()}</span><span><b>{roleName}</b><small>{short(account)}</small></span></div><button className="button ghost full" onClick={() => go("/roles")}>เปลี่ยน Role</button></div>
     </aside>
     <main className="main">
-      <header className="topbar"><div><span className="overline">FREELANCE ESCROW PLATFORM</span><h1>{title}</h1></div><div className="top-buttons"><button className="wallet-chip" onClick={() => connect(false)}><i/> {short(account)}　⌄</button><button className="button ghost" onClick={() => loadData(contract)}>{loading ? "กำลังโหลด…" : "↻ รีเฟรช"}</button><button className="button ghost logout-button" title="ออกจาก session บนเว็บนี้" aria-label="ออกจากระบบ" onClick={logout}>ออกจากระบบ</button></div></header>
-      {(error || notice) && <div className={`notice ${error ? "bad" : "good"}`}><span>{error ? "!" : "✓"}</span><div>{error || notice}{lastTx && <div><a href={`${EXPLORER}/tx/${lastTx}`} target="_blank" rel="noreferrer">ดูธุรกรรม {short(lastTx)} ↗</a></div>}</div><button onClick={() => { setError(""); setNotice(""); }}>×</button></div>}
+      <header className="topbar"><div><span className="overline">{roleName} · WorkFlow</span><h1>{title}</h1></div><div className="top-buttons"><button className="wallet-chip" onClick={() => connect(false)} aria-label={`เปลี่ยนหรือยืนยัน Wallet ปัจจุบัน ${account}`}><i/> {short(account)}　⌄</button><button className="button ghost role-switch" onClick={() => go("/roles")}>เปลี่ยน Role</button><button className="button ghost refresh-button" onClick={() => loadData(contract)} disabled={loading}>{loading ? "กำลังโหลด…" : "↻ รีเฟรช"}</button><button className="button ghost logout-button" title="ออกจาก session บนเว็บนี้" aria-label="ออกจากระบบ" onClick={logout}>ออกจากระบบ</button></div></header>
+      {(error || notice) && <div className={`notice ${error ? "bad" : "good"}`} role={error ? "alert" : "status"}><span>{error ? "!" : "✓"}</span><div>{error || notice}{lastTx && <div><a href={`${EXPLORER}/tx/${lastTx}`} target="_blank" rel="noreferrer">ดูธุรกรรม {short(lastTx)} ↗</a></div>}</div><button aria-label="ปิดข้อความ" onClick={() => { setError(""); setNotice(""); }}>×</button></div>}
       {route === "/roles" && <RolePicker account={account} mode={activeMode} isAdmin={isAdmin} onSelect={chooseMode}/>}
       {hasWorkspace && section === "dashboard" && routeRole === activeMode && <Dashboard mode={activeMode} jobs={visibleJobs} loading={loading} filter={filter} setFilter={setFilter} onJob={(number) => goSection(`job/${number}`)} onCreate={() => goSection("create")}/>}
       {hasWorkspace && section === "create" && routeRole === activeMode && activeMode === "employer" && <CreateJobForm enabled={connected && correctNetwork && activeMode === "employer" && !isAdmin} busy={busy} account={account} onSubmit={createJob}/>}
