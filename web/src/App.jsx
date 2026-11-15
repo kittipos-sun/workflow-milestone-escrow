@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrowserProvider, Contract, isAddress, parseEther } from "ethers";
 import abiFile from "./FreelanceEscrow.abi.json";
 import { CHAIN_ID, CONTRACT_ADDRESS, DEPLOYMENT_BLOCK, EXPLORER } from "./config.js";
@@ -16,6 +16,9 @@ export default function App() {
   const [chainId, setChainId] = useState(null);
   const [admin, setAdmin] = useState("");
   const [mode, setMode] = useState("");
+  const [roleAccount, setRoleAccount] = useState("");
+  const loggedOut = useRef(sessionStorage.getItem("wf-logged-out") === "1");
+  const sessionEpoch = useRef(0);
   const [jobs, setJobs] = useState([]);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -33,7 +36,8 @@ export default function App() {
   const connected = Boolean(contract && account);
   const correctNetwork = chainId === CHAIN_ID;
   const isAdmin = connected && account.toLowerCase() === admin.toLowerCase();
-  const hasWorkspace = connected && correctNetwork && Boolean(mode);
+  const activeMode = roleAccount.toLowerCase() === account.toLowerCase() ? mode : "";
+  const hasWorkspace = connected && correctNetwork && Boolean(activeMode);
 
   useEffect(() => {
     const onHashChange = () => setRoute(location.hash.slice(1) || "/");
@@ -43,10 +47,12 @@ export default function App() {
 
   const loadData = useCallback(async (activeContract) => {
     if (!activeContract) return;
+    const epoch = sessionEpoch.current;
     setLoading(true);
     setError("");
     try {
       const [count, adminAddress] = await Promise.all([activeContract.jobCount(), activeContract.admin()]);
+      if (epoch !== sessionEpoch.current) return;
       setAdmin(adminAddress);
       const total = Number(count);
       const first = Math.max(1, total - 199);
@@ -54,6 +60,7 @@ export default function App() {
         const item = await activeContract.getJob(jobId);
         return { id: jobId, employer: item.employer, freelancer: item.freelancer, title: item.title, description: item.description, amount: item.amount, deadline: item.deadline, status: Number(item.status), escrowBalance: item.escrowBalance, workReference: item.workReference, submittedAt: item.submittedAt, disputeReason: item.disputeReason, disputeEvidence: item.disputeEvidence, disputeOpenedBy: item.disputeOpenedBy, resolutionReason: item.resolutionReason };
       })) : [];
+      if (epoch !== sessionEpoch.current) return;
       setJobs(rows.reverse());
       const history = await Promise.all(Object.entries(EVENT_LABEL).map(async ([name, label]) => {
         try {
@@ -68,17 +75,23 @@ export default function App() {
           return [];
         }
       }));
+      if (epoch !== sessionEpoch.current) return;
       setEvents(history.flat().sort((a, b) => b.block - a.block));
     } catch (loadError) {
-      setError(`อ่านข้อมูล Contract ไม่สำเร็จ: ${errText(loadError)}`);
+      if (epoch === sessionEpoch.current) setError(`อ่านข้อมูล Contract ไม่สำเร็จ: ${errText(loadError)}`);
     } finally {
-      setLoading(false);
+      if (epoch === sessionEpoch.current) setLoading(false);
     }
   }, []);
 
   const connect = useCallback(async (silent = false) => {
+    const epoch = ++sessionEpoch.current;
     setError("");
     setNotice("");
+    if (!silent) {
+      loggedOut.current = false;
+      sessionStorage.removeItem("wf-logged-out");
+    }
     if (!window.ethereum) {
       setError("ไม่พบ MetaMask Extension กรุณาติดตั้งหรือเปิดใช้งาน");
       return;
@@ -86,6 +99,7 @@ export default function App() {
     try {
       const p = new BrowserProvider(window.ethereum);
       const accounts = await p.send(silent ? "eth_accounts" : "eth_requestAccounts", []);
+      if (epoch !== sessionEpoch.current || loggedOut.current) return;
       if (!accounts.length) {
         setAccount("");
         setContract(null);
@@ -93,33 +107,42 @@ export default function App() {
         return;
       }
       const network = await p.getNetwork();
+      if (epoch !== sessionEpoch.current || loggedOut.current) return;
       const accountChanged = account && account.toLowerCase() !== accounts[0].toLowerCase();
       setAccount(accounts[0]);
       setChainId(network.chainId);
-      if (accountChanged) setMode("");
+      if (accountChanged) {
+        setMode("");
+        setRoleAccount("");
+      }
       if (network.chainId !== CHAIN_ID) {
         setContract(null);
         setMode("");
+        setRoleAccount("");
         setError("เปลี่ยนเครือข่าย MetaMask เป็น Sepolia ก่อนใช้งาน");
         return;
       }
       const signer = await p.getSigner();
       const activeContract = new Contract(CONTRACT_ADDRESS, abiFile.abi, signer);
       const adminAddress = await activeContract.admin();
+      if (epoch !== sessionEpoch.current || loggedOut.current) return;
       setContract(activeContract);
       setAdmin(adminAddress);
       await loadData(activeContract);
-      if (!silent || accountChanged || !mode) go("/roles");
+      if (epoch !== sessionEpoch.current || loggedOut.current) return;
+      if (!silent || accountChanged || !mode || roleAccount.toLowerCase() !== accounts[0].toLowerCase()) go("/roles");
       if (!silent) setNotice("เชื่อมต่อ MetaMask บน Sepolia แล้ว เลือก Role เพื่อเริ่มใช้งาน");
     } catch (connectError) {
       setError(errText(connectError));
     }
-  }, [account, loadData, mode]);
+  }, [account, loadData, mode, roleAccount]);
 
   useEffect(() => {
     if (!window.ethereum) return undefined;
     const onAccountsChanged = (accounts) => {
+      if (loggedOut.current) return;
       setMode("");
+      setRoleAccount("");
       if (!accounts.length) {
         setAccount("");
         setContract(null);
@@ -131,14 +154,18 @@ export default function App() {
       }
     };
     const onChainChanged = () => {
+      if (loggedOut.current) return;
       setMode("");
+      setRoleAccount("");
       connect(true);
     };
     window.ethereum.on?.("accountsChanged", onAccountsChanged);
     window.ethereum.on?.("chainChanged", onChainChanged);
-    window.ethereum.request({ method: "eth_accounts" }).then((accounts) => {
-      if (accounts?.length) connect(true);
-    }).catch(() => {});
+    if (!loggedOut.current) {
+      window.ethereum.request({ method: "eth_accounts" }).then((accounts) => {
+        if (accounts?.length && !loggedOut.current) connect(true);
+      }).catch(() => {});
+    }
     return () => {
       window.ethereum.removeListener?.("accountsChanged", onAccountsChanged);
       window.ethereum.removeListener?.("chainChanged", onChainChanged);
@@ -151,13 +178,31 @@ export default function App() {
       return;
     }
     if (!connected) return;
-    if (!mode && route !== "/roles") go("/roles");
-    else if (mode && ["dashboard", "create", "disputes", "history"].includes(routeRole)) go(routeRole === "dashboard" ? `/${mode}` : `/${mode}/${routeRole}`);
-    else if (mode && route !== "/roles" && routeRole && routeRole !== mode) go(`/${mode}`);
-    else if (mode && routeRole === mode && !["dashboard", "create", "job", "disputes", "history"].includes(section)) go(`/${mode}`);
-    else if (mode && routeRole === mode && section === "create" && mode !== "employer") go(`/${mode}`);
-    else if (mode && route === "/") go(`/${mode}`);
-  }, [account, connected, correctNetwork, mode, route, routeRole]);
+    if (!activeMode && route !== "/roles") go("/roles");
+    else if (activeMode && ["dashboard", "create", "disputes", "history"].includes(routeRole)) go(routeRole === "dashboard" ? `/${activeMode}` : `/${activeMode}/${routeRole}`);
+    else if (activeMode && route !== "/roles" && routeRole && routeRole !== activeMode) go(`/${activeMode}`);
+    else if (activeMode && routeRole === activeMode && !["dashboard", "create", "job", "disputes", "history"].includes(section)) go(`/${activeMode}`);
+    else if (activeMode && routeRole === activeMode && section === "create" && activeMode !== "employer") go(`/${activeMode}`);
+    else if (activeMode && route === "/") go(`/${activeMode}`);
+  }, [account, activeMode, connected, correctNetwork, route, routeRole, section]);
+
+  const logout = () => {
+    sessionEpoch.current += 1;
+    loggedOut.current = true;
+    sessionStorage.setItem("wf-logged-out", "1");
+    setAccount("");
+    setContract(null);
+    setChainId(null);
+    setAdmin("");
+    setMode("");
+    setRoleAccount("");
+    setJobs([]);
+    setEvents([]);
+    setError("");
+    setNotice("");
+    setLastTx("");
+    go("/");
+  };
 
   const switchChain = async () => {
     try {
@@ -209,16 +254,17 @@ export default function App() {
     }
     setError("");
     setMode(selected);
+    setRoleAccount(account);
     setFilter("all");
     go(`/${selected}`);
   };
 
-  const goSection = (nextSection) => go(nextSection === "dashboard" ? `/${mode}` : `/${mode}/${nextSection}`);
+  const goSection = (nextSection) => go(nextSection === "dashboard" ? `/${activeMode}` : `/${activeMode}/${nextSection}`);
   const visibleJobs = useMemo(() => {
-    if (!connected || !mode) return [];
-    const filtered = mode === "admin" ? jobs.filter((item) => item.status === 3) : jobs.filter((item) => (mode === "employer" ? item.employer : item.freelancer).toLowerCase() === account.toLowerCase());
+    if (!connected || !activeMode) return [];
+    const filtered = activeMode === "admin" ? jobs.filter((item) => item.status === 3) : jobs.filter((item) => (activeMode === "employer" ? item.employer : item.freelancer).toLowerCase() === account.toLowerCase());
     return filter === "all" ? filtered : filtered.filter((item) => item.status === Number(filter));
-  }, [connected, jobs, mode, account, filter]);
+  }, [connected, jobs, activeMode, account, filter]);
 
   const createJob = async (form) => {
     if (isAdmin) { setError("Admin ไม่สามารถเป็นผู้ว่าจ้างหรือฟรีแลนซ์ได้ตามเงื่อนไข Contract"); return; }
@@ -244,7 +290,7 @@ export default function App() {
   const doResolve = (item, decision, reason) => tx("ตัดสินข้อพิพาท", (activeContract) => activeContract.resolveDispute(item.id, decision, reason));
 
   const title = route === "/" ? "เชื่อมต่อเพื่อเริ่มใช้งาน" : route === "/roles" ? "เลือก Role" : section === "create" ? "สร้างงานใหม่" : section === "disputes" ? "ข้อพิพาท" : section === "history" ? "ประวัติธุรกรรม" : id ? "รายละเอียดงาน" : "แดชบอร์ด";
-  const roleName = mode === "admin" ? "ผู้ดูแลระบบ" : mode === "freelancer" ? "ฟรีแลนซ์" : "ผู้ว่าจ้าง";
+  const roleName = activeMode === "admin" ? "ผู้ดูแลระบบ" : activeMode === "freelancer" ? "ฟรีแลนซ์" : activeMode === "employer" ? "ผู้ว่าจ้าง" : "เลือก Role";
 
   if (!connected || !correctNetwork) {
     return <div className="entry-shell">
@@ -256,27 +302,27 @@ export default function App() {
 
   return <div className="shell">
     <aside className="sidebar">
-      <a className="brand" href={`#/${mode}`}><span className="brand-icon">W</span><span><b>WorkFlow</b><small>FREELANCE ESCROW</small></span></a>
+      <a className="brand" href={`#/${activeMode}`}><span className="brand-icon">W</span><span><b>WorkFlow</b><small>FREELANCE ESCROW</small></span></a>
       <div className="network-label"><i className="live"/> Sepolia Testnet</div>
       <p className="nav-caption">{roleName}</p>
-      <nav>
+      {activeMode && <nav>
         <NavItem icon="▦" label="แดชบอร์ด" active={section === "dashboard" && !id} onClick={() => goSection("dashboard")}/>
-        {mode === "employer" && <NavItem icon="＋" label="สร้างงาน" active={section === "create"} onClick={() => goSection("create")}/>}
+        {activeMode === "employer" && <NavItem icon="＋" label="สร้างงาน" active={section === "create"} onClick={() => goSection("create")}/>}
         <NavItem icon="⚖" label="ข้อพิพาท" active={section === "disputes"} onClick={() => goSection("disputes")}/>
         <NavItem icon="↗" label="ประวัติธุรกรรม" active={section === "history"} onClick={() => goSection("history")}/>
-      </nav>
+      </nav>}
       <div className="sidebar-foot"><div className="account-mini"><span className="avatar">{account.slice(2, 4).toUpperCase()}</span><span><b>{roleName}</b><small>{short(account)}</small></span></div><button className="button ghost full" onClick={() => go("/roles")}>เปลี่ยน Role</button></div>
     </aside>
     <main className="main">
-      <header className="topbar"><div><span className="overline">FREELANCE ESCROW PLATFORM</span><h1>{title}</h1></div><div className="top-buttons"><button className="wallet-chip" onClick={() => connect(false)}><i/> {short(account)}　⌄</button><button className="button ghost" onClick={() => loadData(contract)}>{loading ? "กำลังโหลด…" : "↻ รีเฟรช"}</button></div></header>
+      <header className="topbar"><div><span className="overline">FREELANCE ESCROW PLATFORM</span><h1>{title}</h1></div><div className="top-buttons"><button className="wallet-chip" onClick={() => connect(false)}><i/> {short(account)}　⌄</button><button className="button ghost" onClick={() => loadData(contract)}>{loading ? "กำลังโหลด…" : "↻ รีเฟรช"}</button><button className="button ghost logout-button" title="ออกจาก session บนเว็บนี้" aria-label="ออกจากระบบ" onClick={logout}>ออกจากระบบ</button></div></header>
       {(error || notice) && <div className={`notice ${error ? "bad" : "good"}`}><span>{error ? "!" : "✓"}</span><div>{error || notice}{lastTx && <div><a href={`${EXPLORER}/tx/${lastTx}`} target="_blank" rel="noreferrer">ดูธุรกรรม {short(lastTx)} ↗</a></div>}</div><button onClick={() => { setError(""); setNotice(""); }}>×</button></div>}
-      {route === "/roles" && <RolePicker account={account} mode={mode} isAdmin={isAdmin} onSelect={chooseMode}/>}
-      {hasWorkspace && section === "dashboard" && routeRole === mode && <Dashboard mode={mode} jobs={visibleJobs} loading={loading} filter={filter} setFilter={setFilter} onJob={(number) => goSection(`job/${number}`)} onCreate={() => goSection("create")}/>}
-      {hasWorkspace && section === "create" && routeRole === mode && mode === "employer" && <CreateJobForm enabled={connected && correctNetwork && mode === "employer" && !isAdmin} busy={busy} account={account} onSubmit={createJob}/>}
-      {hasWorkspace && id && section === "job" && routeRole === mode && <JobDetail job={job} loading={loading} mode={mode} account={account} isAdmin={isAdmin} enabled={connected && correctNetwork} busy={busy} events={events.filter((event) => event.jobId === id)} onBack={() => goSection("dashboard")} onDeposit={doDeposit} onSubmit={doSubmit} onRelease={doRelease} onRaise={doRaise} onEvidence={doEvidence} onResolve={doResolve}/>}
-      {hasWorkspace && section === "disputes" && routeRole === mode && <DisputeList jobs={jobs.filter((item) => item.status === 3 && (mode === "admin" ? isAdmin : [item.employer, item.freelancer].some((address) => address.toLowerCase() === account.toLowerCase())))} mode={mode} isAdmin={isAdmin} onJob={(number) => goSection(`job/${number}`)}/>}
-      {hasWorkspace && section === "history" && routeRole === mode && <ActivityList events={events}/>}
-      {hasWorkspace && routeRole === mode && !["dashboard", "create", "job", "disputes", "history"].includes(section) && <Dashboard mode={mode} jobs={visibleJobs} loading={loading} filter={filter} setFilter={setFilter} onJob={(number) => goSection(`job/${number}`)} onCreate={() => goSection("create")}/>}
+      {route === "/roles" && <RolePicker account={account} mode={activeMode} isAdmin={isAdmin} onSelect={chooseMode}/>}
+      {hasWorkspace && section === "dashboard" && routeRole === activeMode && <Dashboard mode={activeMode} jobs={visibleJobs} loading={loading} filter={filter} setFilter={setFilter} onJob={(number) => goSection(`job/${number}`)} onCreate={() => goSection("create")}/>}
+      {hasWorkspace && section === "create" && routeRole === activeMode && activeMode === "employer" && <CreateJobForm enabled={connected && correctNetwork && activeMode === "employer" && !isAdmin} busy={busy} account={account} onSubmit={createJob}/>}
+      {hasWorkspace && id && section === "job" && routeRole === activeMode && <JobDetail job={job} loading={loading} mode={activeMode} account={account} isAdmin={isAdmin} enabled={connected && correctNetwork} busy={busy} events={events.filter((event) => event.jobId === id)} onBack={() => goSection("dashboard")} onDeposit={doDeposit} onSubmit={doSubmit} onRelease={doRelease} onRaise={doRaise} onEvidence={doEvidence} onResolve={doResolve}/>}
+      {hasWorkspace && section === "disputes" && routeRole === activeMode && <DisputeList jobs={jobs.filter((item) => item.status === 3 && (activeMode === "admin" ? isAdmin : [item.employer, item.freelancer].some((address) => address.toLowerCase() === account.toLowerCase())))} mode={activeMode} isAdmin={isAdmin} onJob={(number) => goSection(`job/${number}`)}/>}
+      {hasWorkspace && section === "history" && routeRole === activeMode && <ActivityList events={events}/>}
+      {hasWorkspace && routeRole === activeMode && !["dashboard", "create", "job", "disputes", "history"].includes(section) && <Dashboard mode={activeMode} jobs={visibleJobs} loading={loading} filter={filter} setFilter={setFilter} onJob={(number) => goSection(`job/${number}`)} onCreate={() => goSection("create")}/>}
       <footer><span>WorkFlow · Smart Contract บน Sepolia</span><a href={`${EXPLORER}/address/${CONTRACT_ADDRESS}`} target="_blank" rel="noreferrer">Contract {short(CONTRACT_ADDRESS)} ↗</a></footer>
     </main>
   </div>;
