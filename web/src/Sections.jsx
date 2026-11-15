@@ -2,8 +2,8 @@ import React, { lazy, Suspense, useMemo, useState } from "react";
 import { formatEther, isAddress, parseEther } from "ethers";
 import {
   ArrowLeft, ArrowRight, ArrowUpRight, BadgeCheck, BriefcaseBusiness, CalendarDays,
-  Check, ChevronRight, CircleAlert, CircleCheck, Clock3, ExternalLink, FileCheck2, Plus,
-  FileText, HandCoins, History, LockKeyhole, Search, ShieldCheck, WalletCards,
+  Check, ChevronRight, CircleAlert, CircleCheck, Clock3, Coins, ExternalLink, FileCheck2, Plus,
+  FileText, HandCoins, History, LockKeyhole, Scale, Search, ShieldCheck, Upload, WalletCards,
 } from "lucide-react";
 import { EXPLORER, CONTRACT_ADDRESS } from "./config.js";
 import StageDemo from "./hero-demo/StageDemo.tsx";
@@ -189,11 +189,20 @@ export function JobDetail({ job, loading, mode, account, isAdmin, enabled, busy,
   const can = enabled && !busy;
   const submit = (event, fn) => { event.preventDefault(); fn(); };
   const releaseLabel = job.status === 5 ? "คืนเงินผู้ว่าจ้าง" : "จ่ายให้ฟรีแลนซ์";
+  const disputed = job.status === 3;
+  const settled = job.status === 4 || job.status === 5;
+  const submitted = Boolean(job.workReference) || job.status === 2 || settled;
+  const flow = {
+    0: { id: "agreement", from: 0, label: "ข้อตกลงพร้อมแล้ว · รอฝากค่าจ้าง", source: <FileText size={14}/>, icon: <FileText size={13}/>, target: <LockKeyhole size={13}/> },
+    1: { id: "funding", from: 1, label: "ฝากค่าจ้างใน Escrow แล้ว · รอส่งผลงาน", source: <LockKeyhole size={14}/>, icon: <Coins size={13}/>, target: <Upload size={13}/> },
+    2: { id: "payout", from: 2, label: "ส่งผลงานแล้ว · รออนุมัติและจ่ายเงิน", source: <FileCheck2 size={14}/>, icon: <FileCheck2 size={13}/>, target: <HandCoins size={13}/> },
+    3: { id: "dispute", from: 2, label: "เปิดข้อพิพาทแล้ว · รอผู้ดูแลพิจารณา", source: <Scale size={14}/>, icon: <Scale size={13}/>, target: <BadgeCheck size={13}/> },
+  }[job.status];
   const timeline = [
     { title: "สร้างข้อตกลง", complete: true },
-    { title: "ฝากค่าจ้าง", complete: job.status >= 1 },
-    { title: "ส่งผลงาน", complete: job.status >= 2 || job.status === 3 || job.status >= 4 },
-    { title: job.status === 3 ? "ตัดสินข้อพิพาท" : releaseLabel, complete: job.status === 3 || job.status >= 4 },
+    { title: "ฝากค่าจ้าง", complete: job.status >= 1, active: job.status === 0 },
+    { title: disputed && !submitted ? "เปิดข้อพิพาท" : "ส่งผลงาน", complete: submitted || disputed, active: job.status === 1 },
+    { title: disputed ? "ตัดสินข้อพิพาท" : releaseLabel, complete: settled, active: job.status === 2 || disputed },
   ];
   return <section className="page job-detail-page">
     <button className="back-link" onClick={onBack}><ArrowLeft size={16}/>กลับไปยังแฟ้มงาน</button>
@@ -201,7 +210,19 @@ export function JobDetail({ job, loading, mode, account, isAdmin, enabled, busy,
       <div className="detail-title"><span className="eyebrow"><span className="eyebrow-rule"/> งาน #{String(job.id).padStart(3, "0")}</span><h2>{job.title}</h2><p>{job.description}</p></div>
       <span className={"large-status status-" + job.status}><i/>{STATUS[job.status]}</span>
     </div>
-    <div className="milestone-track" aria-label="ความคืบหน้าของงาน">{timeline.map((item, index) => <div className={"milestone" + (item.complete ? " complete" : "") + (job.status === 3 && index === 3 ? " disputed" : "")} key={item.title}><i>{item.complete ? <Check size={13}/> : index + 1}</i><span>{item.title}</span></div>)}</div>
+    <div className={"milestone-track" + (flow ? ` flow-${flow.id}` : "")} aria-label="ความคืบหน้าของงาน">
+      {timeline.map((item, index) => <div className={"milestone" + (item.complete ? " complete" : "") + (item.active ? " active" : "") + (disputed && index === 3 ? " disputed" : "")} aria-current={item.active ? "step" : undefined} key={item.title}>
+        <i>{item.complete ? <Check size={13}/> : item.active && flow ? flow.target : index + 1}</i>
+        <span>{item.title}</span>
+        {flow?.from === index && <span className={`milestone-traveler traveler-${flow.id}`} aria-hidden="true"><span className="traveler-glyph">{flow.icon}</span></span>}
+      </div>)}
+      {flow && <div className={`milestone-motion motion-${flow.id}`} role="status">
+        <span className="motion-source" aria-hidden="true">{flow.source}</span>
+        <span className="motion-route" aria-hidden="true"><i className="motion-runner">{flow.icon}</i></span>
+        <span className="motion-target" aria-hidden="true">{flow.target}</span>
+        <span className="motion-copy">{flow.label}</span>
+      </div>}
+    </div>
     <div className="detail-layout">
       <div className="detail-column">
         <section className="detail-sheet">
