@@ -32,6 +32,8 @@ export default function StageDemo() {
     play="once"
     poster={{ step: 4 }}
     script={script}
+    theme="dark"
+    accent="#55c2ff"
     className="wf-demo"
   >
     {(state, rect, layout) => {
