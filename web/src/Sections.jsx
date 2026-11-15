@@ -2,7 +2,7 @@ import React, { lazy, Suspense, useMemo, useState } from "react";
 import { formatEther, isAddress, parseEther } from "ethers";
 import {
   ArrowLeft, ArrowRight, ArrowUpRight, BadgeCheck, BriefcaseBusiness, CalendarDays,
-  Check, ChevronRight, CircleAlert, CircleCheck, Clock3, Coins, ExternalLink, FileCheck2, Plus,
+  Check, ChevronRight, CircleAlert, CircleCheck, Clock3, ExternalLink, FileCheck2, Plus,
   FileText, HandCoins, History, LockKeyhole, Scale, Search, ShieldCheck, Upload, WalletCards,
 } from "lucide-react";
 import { EXPLORER, CONTRACT_ADDRESS } from "./config.js";
@@ -194,9 +194,9 @@ export function JobDetail({ job, loading, mode, account, isAdmin, enabled, busy,
   const submitted = Boolean(job.workReference) || job.status === 2 || settled;
   const flow = {
     0: { id: "agreement", from: 0, label: "ข้อตกลงพร้อมแล้ว · รอฝากค่าจ้าง", source: <FileText size={14}/>, icon: <FileText size={13}/>, target: <LockKeyhole size={13}/> },
-    1: { id: "funding", from: 1, label: "ฝากค่าจ้างใน Escrow แล้ว · รอส่งผลงาน", source: <LockKeyhole size={14}/>, icon: <Coins size={13}/>, target: <Upload size={13}/> },
-    2: { id: "payout", from: 2, label: "ส่งผลงานแล้ว · รออนุมัติและจ่ายเงิน", source: <FileCheck2 size={14}/>, icon: <FileCheck2 size={13}/>, target: <HandCoins size={13}/> },
-    3: { id: "dispute", from: 2, label: "เปิดข้อพิพาทแล้ว · รอผู้ดูแลพิจารณา", source: <Scale size={14}/>, icon: <Scale size={13}/>, target: <BadgeCheck size={13}/> },
+    1: { id: "funding", from: 1, label: "ฝากค่าจ้างใน Escrow แล้ว · รอส่งผลงาน", source: <LockKeyhole size={14}/>, target: <Upload size={13}/> },
+    2: { id: "payout", from: 2, label: "ส่งผลงานแล้ว · รออนุมัติและจ่ายเงิน", source: <FileCheck2 size={14}/>, target: <HandCoins size={13}/> },
+    3: { id: "dispute", from: 2, label: "เปิดข้อพิพาทแล้ว · รอผู้ดูแลพิจารณา", source: <Scale size={14}/>, target: <BadgeCheck size={13}/> },
   }[job.status];
   const timeline = [
     { title: "สร้างข้อตกลง", complete: true },
@@ -214,11 +214,11 @@ export function JobDetail({ job, loading, mode, account, isAdmin, enabled, busy,
       {timeline.map((item, index) => <div className={"milestone" + (item.complete ? " complete" : "") + (item.active ? " active" : "") + (disputed && index === 3 ? " disputed" : "")} aria-current={item.active ? "step" : undefined} key={item.title}>
         <i>{item.complete ? <Check size={13}/> : item.active && flow ? flow.target : index + 1}</i>
         <span>{item.title}</span>
-        {flow?.from === index && <span className={`milestone-traveler traveler-${flow.id}`} aria-hidden="true"><span className="traveler-glyph">{flow.icon}</span></span>}
+        {flow?.from === index && <span className="milestone-arrow-runner" aria-hidden="true"><i/><i/><i/></span>}
       </div>)}
       {flow && <div className={`milestone-motion motion-${flow.id}`} role="status">
         <span className="motion-source" aria-hidden="true">{flow.source}</span>
-        <span className="motion-route" aria-hidden="true"><i className="motion-runner">{flow.icon}</i></span>
+        <span className="motion-route" aria-hidden="true"><i/><i/><i/></span>
         <span className="motion-target" aria-hidden="true">{flow.target}</span>
         <span className="motion-copy">{flow.label}</span>
       </div>}
