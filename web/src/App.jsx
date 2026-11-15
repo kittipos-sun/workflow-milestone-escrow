@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrowserProvider, Contract, isAddress, parseEther } from "ethers";
+import { ArrowLeftRight, BriefcaseBusiness, Clock3, LayoutDashboard, LogOut, Plus, RefreshCw, Scale, WalletCards } from "lucide-react";
 import abiFile from "./FreelanceEscrow.abi.json";
 import { CHAIN_ID, CONTRACT_ADDRESS, DEPLOYMENT_BLOCK, EXPLORER } from "./config.js";
 import { Welcome, RolePicker, Dashboard, CreateJobForm, JobDetail, DisputeList, ActivityList, NavItem } from "./Sections.jsx";
@@ -296,34 +297,55 @@ export default function App() {
     return <div className="entry-shell">
       {error && <div className="notice bad entry-notice"><span>!</span><div>{error}</div><button onClick={() => setError("")}>×</button></div>}
       <Welcome connected={connected} wrongNetwork={Boolean(account && !correctNetwork)} onConnect={() => connect(false)} onSwitch={switchChain}/>
-      <footer><span>WorkFlow · Smart Contract บน Sepolia</span><a href={`${EXPLORER}/address/${CONTRACT_ADDRESS}`} target="_blank" rel="noreferrer">Contract {short(CONTRACT_ADDRESS)} ↗</a></footer>
+      <footer className="site-footer"><span>WorkFlow · Freelance escrow on Sepolia</span><a href={EXPLORER + "/address/" + CONTRACT_ADDRESS} target="_blank" rel="noreferrer">Contract {short(CONTRACT_ADDRESS)} ↗</a></footer>
     </div>;
   }
 
   return <div className="shell">
     <aside className="sidebar">
-      <a className="brand" href={`#/${activeMode}`} aria-label="WorkFlow กลับไปหน้าแดชบอร์ด"><span className="brand-icon">W</span><span><b>WorkFlow</b><small>Freelance Escrow</small></span></a>
-      <div className="network-label" aria-label="เชื่อมต่อเครือข่าย Sepolia Testnet"><i className="live"/> Sepolia Testnet</div>
+      <a className="brand" href={"#/" + activeMode} aria-label="WorkFlow กลับไปหน้าแดชบอร์ด"><span className="brand-word">work<span>flow</span></span><small>สัญญางานบนเชน</small></a>
+      <div className="network-label" aria-label="เชื่อมต่อเครือข่าย Sepolia Testnet"><i className="live"/> <span>Sepolia Testnet</span><b>เชื่อมแล้ว</b></div>
+      <div className="rail-heading"><span>พื้นที่ทำงาน</span><button aria-label="เปลี่ยน Role" title="เปลี่ยน Role" onClick={() => go("/roles")}><ArrowLeftRight size={15}/></button></div>
       <p className="nav-caption">{roleName}</p>
-      {activeMode && <nav aria-label={`เมนู${roleName}`}>
-        <NavItem icon="▦" label="แดชบอร์ด" active={section === "dashboard" && !id} onClick={() => goSection("dashboard")}/>
-        {activeMode === "employer" && <NavItem icon="＋" label="สร้างงาน" active={section === "create"} onClick={() => goSection("create")}/>}
-        <NavItem icon="⚖" label="ข้อพิพาท" active={section === "disputes"} onClick={() => goSection("disputes")}/>
-        <NavItem icon="↗" label="ประวัติธุรกรรม" active={section === "history"} onClick={() => goSection("history")}/>
+      {activeMode && <nav aria-label={"เมนู " + roleName}>
+        <NavItem icon={<LayoutDashboard size={18}/>} label="งานของฉัน" active={section === "dashboard" && !id} onClick={() => goSection("dashboard")}/>
+        {activeMode === "employer" && <NavItem icon={<Plus size={18}/>} label="สร้างข้อตกลง" active={section === "create"} onClick={() => goSection("create")}/>}
+        <NavItem icon={<Scale size={18}/>} label="ข้อพิพาท" active={section === "disputes"} onClick={() => goSection("disputes")}/>
+        <NavItem icon={<Clock3 size={18}/>} label="ประวัติบนเชน" active={section === "history"} onClick={() => goSection("history")}/>
       </nav>}
-      <div className="sidebar-foot"><div className="account-mini"><span className="avatar">{account.slice(2, 4).toUpperCase()}</span><span><b>{roleName}</b><small>{short(account)}</small></span></div><button className="button ghost full" onClick={() => go("/roles")}>เปลี่ยน Role</button></div>
+      <div className="sidebar-foot">
+        <div className="rail-note"><BriefcaseBusiness size={17}/><span><b>{roleName}</b><small>{isAdmin ? "สิทธิ์ผู้ดูแล Contract" : "ทำงานกับคนละ Wallet ได้"}</small></span></div>
+        <div className="account-mini"><span className="avatar"><WalletCards size={17}/></span><span><b>Wallet</b><small>{short(account)}</small></span></div>
+      </div>
     </aside>
     <main className="main">
-      <header className="topbar"><div><span className="overline">{roleName} · WorkFlow</span><h1>{title}</h1></div><div className="top-buttons"><button className="wallet-chip" onClick={() => connect(false)} aria-label={`เปลี่ยนหรือยืนยัน Wallet ปัจจุบัน ${account}`}><i/> {short(account)}　⌄</button><button className="button ghost role-switch" onClick={() => go("/roles")}>เปลี่ยน Role</button><button className="button ghost refresh-button" onClick={() => loadData(contract)} disabled={loading}>{loading ? "กำลังโหลด…" : "↻ รีเฟรช"}</button><button className="button ghost logout-button" title="ออกจาก session บนเว็บนี้" aria-label="ออกจากระบบ" onClick={logout}>ออกจากระบบ</button></div></header>
-      {(error || notice) && <div className={`notice ${error ? "bad" : "good"}`} role={error ? "alert" : "status"}><span>{error ? "!" : "✓"}</span><div>{error || notice}{lastTx && <div><a href={`${EXPLORER}/tx/${lastTx}`} target="_blank" rel="noreferrer">ดูธุรกรรม {short(lastTx)} ↗</a></div>}</div><button aria-label="ปิดข้อความ" onClick={() => { setError(""); setNotice(""); }}>×</button></div>}
-      {route === "/roles" && <RolePicker account={account} mode={activeMode} isAdmin={isAdmin} onSelect={chooseMode}/>}
-      {hasWorkspace && section === "dashboard" && routeRole === activeMode && <Dashboard mode={activeMode} jobs={visibleJobs} loading={loading} filter={filter} setFilter={setFilter} onJob={(number) => goSection(`job/${number}`)} onCreate={() => goSection("create")}/>}
-      {hasWorkspace && section === "create" && routeRole === activeMode && activeMode === "employer" && <CreateJobForm enabled={connected && correctNetwork && activeMode === "employer" && !isAdmin} busy={busy} account={account} onSubmit={createJob}/>}
-      {hasWorkspace && id && section === "job" && routeRole === activeMode && <JobDetail job={job} loading={loading} mode={activeMode} account={account} isAdmin={isAdmin} enabled={connected && correctNetwork} busy={busy} events={events.filter((event) => event.jobId === id)} onBack={() => goSection("dashboard")} onDeposit={doDeposit} onSubmit={doSubmit} onRelease={doRelease} onRaise={doRaise} onEvidence={doEvidence} onResolve={doResolve}/>}
-      {hasWorkspace && section === "disputes" && routeRole === activeMode && <DisputeList jobs={jobs.filter((item) => item.status === 3 && (activeMode === "admin" ? isAdmin : [item.employer, item.freelancer].some((address) => address.toLowerCase() === account.toLowerCase())))} mode={activeMode} isAdmin={isAdmin} onJob={(number) => goSection(`job/${number}`)}/>}
-      {hasWorkspace && section === "history" && routeRole === activeMode && <ActivityList events={events}/>}
-      {hasWorkspace && routeRole === activeMode && !["dashboard", "create", "job", "disputes", "history"].includes(section) && <Dashboard mode={activeMode} jobs={visibleJobs} loading={loading} filter={filter} setFilter={setFilter} onJob={(number) => goSection(`job/${number}`)} onCreate={() => goSection("create")}/>}
-      <footer><span>WorkFlow · Smart Contract บน Sepolia</span><a href={`${EXPLORER}/address/${CONTRACT_ADDRESS}`} target="_blank" rel="noreferrer">Contract {short(CONTRACT_ADDRESS)} ↗</a></footer>
+      <a className="mobile-brand" href={"#/" + activeMode} aria-label="WorkFlow ไปยังงานของฉัน"><span className="brand-word">work<span>flow</span></span><small>สัญญางานบนเชน</small></a>
+      <header className="topbar">
+        <div className="topbar-title"><span className="breadcrumb">WorkFlow <b>/</b> {roleName}</span><h1>{title}</h1></div>
+        <div className="top-buttons">
+          <button className="wallet-chip" onClick={() => connect(false)} aria-label={"เปลี่ยนหรือยืนยัน Wallet ปัจจุบัน " + account}><i/> <span>{short(account)}</span></button>
+          <button className="button ghost role-switch" onClick={() => go("/roles")}><ArrowLeftRight size={16}/> เปลี่ยน Role</button>
+          <button className="button ghost refresh-button" onClick={() => loadData(contract)} disabled={loading}><RefreshCw size={15} className={loading ? "spin" : ""}/>{loading ? "กำลังอ่านข้อมูล" : "รีเฟรช"}</button>
+          <button className="button logout-button" title="ออกจาก session บนเว็บนี้" aria-label="ออกจากระบบ" onClick={logout}><LogOut size={16}/><span>ออกจากระบบ</span></button>
+        </div>
+      </header>
+      {(error || notice) && <div className={"notice " + (error ? "bad" : "good")} role={error ? "alert" : "status"}><span>{error ? "!" : "✓"}</span><div>{error || notice}{lastTx && <div><a href={EXPLORER + "/tx/" + lastTx} target="_blank" rel="noreferrer">ดูธุรกรรม {short(lastTx)} ↗</a></div>}</div><button aria-label="ปิดข้อความ" onClick={() => { setError(""); setNotice(""); }}>×</button></div>}
+      <div className="page-frame">
+        {route === "/roles" && <RolePicker account={account} mode={activeMode} isAdmin={isAdmin} onSelect={chooseMode}/>}
+        {hasWorkspace && section === "dashboard" && routeRole === activeMode && <Dashboard mode={activeMode} jobs={visibleJobs} loading={loading} filter={filter} setFilter={setFilter} onJob={(number) => goSection("job/" + number)} onCreate={() => goSection("create")}/>}
+        {hasWorkspace && section === "create" && routeRole === activeMode && activeMode === "employer" && <CreateJobForm enabled={connected && correctNetwork && activeMode === "employer" && !isAdmin} busy={busy} account={account} onSubmit={createJob}/>}
+        {hasWorkspace && id && section === "job" && routeRole === activeMode && <JobDetail job={job} loading={loading} mode={activeMode} account={account} isAdmin={isAdmin} enabled={connected && correctNetwork} busy={busy} events={events.filter((event) => event.jobId === id)} onBack={() => goSection("dashboard")} onDeposit={doDeposit} onSubmit={doSubmit} onRelease={doRelease} onRaise={doRaise} onEvidence={doEvidence} onResolve={doResolve}/>}
+        {hasWorkspace && section === "disputes" && routeRole === activeMode && <DisputeList jobs={jobs.filter((item) => item.status === 3 && (activeMode === "admin" ? isAdmin : [item.employer, item.freelancer].some((address) => address.toLowerCase() === account.toLowerCase())))} mode={activeMode} isAdmin={isAdmin} onJob={(number) => goSection("job/" + number)}/>}
+        {hasWorkspace && section === "history" && routeRole === activeMode && <ActivityList events={events}/>}
+        {hasWorkspace && routeRole === activeMode && !["dashboard", "create", "job", "disputes", "history"].includes(section) && <Dashboard mode={activeMode} jobs={visibleJobs} loading={loading} filter={filter} setFilter={setFilter} onJob={(number) => goSection("job/" + number)} onCreate={() => goSection("create")}/>}
+      </div>
+      {activeMode && <nav className="mobile-nav" aria-label="เมนูหลัก">
+        <NavItem icon={<LayoutDashboard size={18}/>} label="งาน" active={section === "dashboard" && !id} onClick={() => goSection("dashboard")}/>
+        {activeMode === "employer" && <NavItem icon={<Plus size={18}/>} label="สร้าง" active={section === "create"} onClick={() => goSection("create")}/>}
+        <NavItem icon={<Scale size={18}/>} label="ข้อพิพาท" active={section === "disputes"} onClick={() => goSection("disputes")}/>
+        <NavItem icon={<Clock3 size={18}/>} label="ประวัติ" active={section === "history"} onClick={() => goSection("history")}/>
+      </nav>}
+      <footer className="site-footer"><span>WorkFlow · Sepolia Testnet</span><a href={EXPLORER + "/address/" + CONTRACT_ADDRESS} target="_blank" rel="noreferrer">Contract {short(CONTRACT_ADDRESS)} ↗</a></footer>
     </main>
   </div>;
 }

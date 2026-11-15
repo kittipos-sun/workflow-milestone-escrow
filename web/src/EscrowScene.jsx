@@ -1,147 +1,187 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
+import { LockKeyhole } from "lucide-react";
 
 export default function EscrowScene() {
   const canvasRef = useRef(null);
+  const [available, setAvailable] = useState(true);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return undefined;
+    const host = canvas?.parentElement;
+    if (!canvas || !host) return undefined;
+
     let renderer;
     try {
-      renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: "low-power" });
+      renderer = new THREE.WebGLRenderer({
+        canvas,
+        alpha: true,
+        antialias: true,
+        powerPreference: "low-power",
+      });
     } catch {
+      setAvailable(false);
       return undefined;
     }
 
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
-    camera.position.set(0, 0, 8.4);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, window.innerWidth < 700 ? 1.1 : 1.35));
-    renderer.setClearColor(0x000000, 0);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.setClearColor(0x000000, 0);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.35));
 
-    const group = new THREE.Group();
-    scene.add(group);
-    scene.add(new THREE.AmbientLight(0xd7e5dc, 1.25));
-    const keyLight = new THREE.PointLight(0xcde5aa, 34, 12);
-    keyLight.position.set(2.7, 2.4, 4);
-    scene.add(keyLight);
-    const rimLight = new THREE.PointLight(0x8daeb8, 24, 12);
-    rimLight.position.set(-3, -1.6, 1.5);
-    scene.add(rimLight);
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 40);
+    const stage = new THREE.Group();
+    stage.rotation.set(-0.12, -0.18, -0.04);
+    scene.add(stage);
 
-    const vault = new THREE.Group();
-    group.add(vault);
-    const coreMaterial = new THREE.MeshPhysicalMaterial({ color: 0x246a52, metalness: 0.34, roughness: 0.24, clearcoat: 1, clearcoatRoughness: 0.18, emissive: 0x102c20, emissiveIntensity: 0.3, transparent: true, opacity: 0.76 });
-    const core = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1.5), coreMaterial);
-    vault.add(core);
-    const frame = new THREE.LineSegments(new THREE.EdgesGeometry(core.geometry), new THREE.LineBasicMaterial({ color: 0xcde8a8, transparent: true, opacity: 0.88 }));
-    frame.scale.setScalar(1.002);
-    vault.add(frame);
-    const coin = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.52, 0.17, 48), new THREE.MeshPhysicalMaterial({ color: 0xd1ad6c, metalness: 0.78, roughness: 0.22, clearcoat: 1, emissive: 0x483518, emissiveIntensity: 0.2 }));
+    scene.add(new THREE.AmbientLight(0xeaf2f5, 1.6));
+    const key = new THREE.DirectionalLight(0xfff0ce, 2.1);
+    key.position.set(-2.4, 3.2, 5);
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0x8fb9d1, 1.25);
+    fill.position.set(3, -1.5, 3);
+    scene.add(fill);
+
+    const addBox = (parent, size, position, color, material = {}) => {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(size[0], size[1], size[2]),
+        new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.04, ...material }),
+      );
+      mesh.position.set(position[0], position[1], position[2]);
+      parent.add(mesh);
+      return mesh;
+    };
+
+    // A contract folio, its pages and the escrow seal are decorative.
+    addBox(stage, [1.98, 2.52, 0.14], [0, 0, -0.19], 0x183c51, { roughness: 0.6 });
+    addBox(stage, [1.9, 2.45, 0.06], [0.035, -0.015, -0.085], 0xd8e3e8);
+    addBox(stage, [1.82, 2.37, 0.055], [0.025, -0.005, -0.015], 0xf7f9f8);
+
+    addBox(stage, [0.78, 0.1, 0.025], [-0.43, 0.9, 0.025], 0x24669b, { roughness: 0.45 });
+    addBox(stage, [0.18, 0.1, 0.03], [0.68, 0.9, 0.03], 0xe0b85a, { roughness: 0.4, metalness: 0.22 });
+
+    const ink = 0x9bb0bb;
+    [-0.18, -0.39, -0.6, -0.81].forEach((y, index) => {
+      addBox(stage, [index === 0 ? 1.25 : 1.48, 0.045, 0.02], [-0.07, y, 0.03], ink);
+    });
+    [-0.29, -0.5, -0.71].forEach((y) => {
+      addBox(stage, [0.78, 0.028, 0.018], [-0.42, y, 0.03], 0xc5d1d5);
+    });
+
+    const seal = new THREE.Group();
+    seal.position.set(0.74, -0.78, 0.21);
+    stage.add(seal);
+    const coin = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.43, 0.43, 0.1, 40),
+      new THREE.MeshStandardMaterial({ color: 0xd4aa50, roughness: 0.3, metalness: 0.62 }),
+    );
     coin.rotation.x = Math.PI / 2;
-    coin.position.z = 0.98;
-    vault.add(coin);
-    const mark = new THREE.Group();
-    const markMaterial = new THREE.MeshBasicMaterial({ color: 0xf8e6bb });
-    const markTop = new THREE.Mesh(new THREE.OctahedronGeometry(0.2, 0), markMaterial);
-    markTop.scale.set(0.58, 0.88, 0.15);
-    markTop.position.y = 0.09;
-    const markBottom = new THREE.Mesh(new THREE.OctahedronGeometry(0.2, 0), markMaterial);
-    markBottom.scale.set(0.58, 0.78, 0.15);
-    markBottom.position.y = -0.15;
-    mark.add(markTop, markBottom);
-    mark.position.set(0, 0, 1.08);
-    vault.add(mark);
+    seal.add(coin);
+    const inset = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.33, 0.33, 0.105, 40),
+      new THREE.MeshStandardMaterial({ color: 0xf1d580, roughness: 0.34, metalness: 0.48 }),
+    );
+    inset.rotation.x = Math.PI / 2;
+    inset.position.z = 0.012;
+    seal.add(inset);
 
-    const ringMaterial = new THREE.MeshBasicMaterial({ color: 0x6e9e74, transparent: true, opacity: 0.58, side: THREE.DoubleSide });
-    const ringA = new THREE.Mesh(new THREE.TorusGeometry(1.75, 0.015, 8, 144), ringMaterial);
-    ringA.rotation.set(0.82, 0.16, 0.28);
-    group.add(ringA);
-    const ringB = new THREE.Mesh(new THREE.TorusGeometry(2.12, 0.01, 8, 144), new THREE.MeshBasicMaterial({ color: 0x7191a1, transparent: true, opacity: 0.38 }));
-    ringB.rotation.set(-0.56, 0.6, -0.48);
-    group.add(ringB);
+    const shackle = new THREE.Mesh(
+      new THREE.TorusGeometry(0.13, 0.035, 9, 24),
+      new THREE.MeshStandardMaterial({ color: 0x214b63, roughness: 0.42, metalness: 0.22 }),
+    );
+    shackle.position.set(0, 0.075, 0.095);
+    seal.add(shackle);
+    addBox(seal, [0.25, 0.2, 0.09], [0, -0.075, 0.11], 0x214b63, { roughness: 0.42, metalness: 0.22 });
+    addBox(seal, [0.035, 0.07, 0.012], [0, -0.06, 0.16], 0xf1d580, { roughness: 0.38, metalness: 0.28 });
 
-    const dotMaterials = [0xd3e5ae, 0x90b6c6, 0xc9ad84].map((color) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.84 }));
-    for (let index = 0; index < 12; index += 1) {
-      const angle = index * Math.PI * (3 - Math.sqrt(5));
-      const y = 1 - (index / 11) * 2;
-      const radius = Math.sqrt(1 - y * y);
-      const dot = new THREE.Mesh(new THREE.SphereGeometry(index % 4 === 0 ? 0.055 : 0.032, 10, 10), dotMaterials[index % dotMaterials.length]);
-      dot.position.set(Math.cos(angle) * radius * 2.35, y * 2.35, Math.sin(angle) * radius * 1.15);
-      scene.add(dot);
-    }
+    camera.position.set(0, 0, 5.35);
+    camera.lookAt(0, 0, 0);
 
-    const starCount = 90;
-    const positions = new Float32Array(starCount * 3);
-    for (let index = 0; index < starCount; index += 1) {
-      positions[index * 3] = (Math.random() - 0.5) * 8.4;
-      positions[index * 3 + 1] = (Math.random() - 0.5) * 6.5;
-      positions[index * 3 + 2] = (Math.random() - 0.5) * 3.2 - 0.7;
-    }
-    const starsGeometry = new THREE.BufferGeometry();
-    starsGeometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    const starsMaterial = new THREE.PointsMaterial({ color: 0x8fa599, size: 0.018, transparent: true, opacity: 0.58, sizeAttenuation: true });
-    const stars = new THREE.Points(starsGeometry, starsMaterial);
-    scene.add(stars);
-
+    let width = 0;
+    let height = 0;
     const resize = () => {
-      const { width, height } = canvas.getBoundingClientRect();
-      if (!width || !height) return;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width < 1 || rect.height < 1) return;
+      width = rect.width;
+      height = rect.height;
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, window.innerWidth < 700 ? 1.1 : 1.35));
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
+      const fov = THREE.MathUtils.degToRad(camera.fov);
+      const fitHeight = 2.85 / (2 * Math.tan(fov / 2));
+      const fitWidth = 2.65 / (2 * Math.tan(fov / 2) * camera.aspect);
+      camera.position.z = Math.max(fitHeight, fitWidth) * 1.12;
       camera.updateProjectionMatrix();
+      if (reduced || !inView || document.hidden) draw(0);
     };
+
+    const motionQuery = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    let reduced = motionQuery?.matches ?? false;
+    let inView = true;
+    let pointerX = 0;
+    let pointerY = 0;
+    const target = { x: 0, y: 0 };
+    const draw = (time = 0) => {
+      if (!width || !height) return;
+      const t = reduced ? 0 : time / 1000;
+      const desiredX = -0.12 + target.y * 0.1 + Math.sin(t * 0.32) * 0.025;
+      const desiredY = -0.18 + target.x * 0.12 + Math.sin(t * 0.25) * 0.045;
+      stage.rotation.x += (desiredX - stage.rotation.x) * (reduced ? 1 : 0.055);
+      stage.rotation.y += (desiredY - stage.rotation.y) * (reduced ? 1 : 0.055);
+      stage.position.y = reduced ? 0 : Math.sin(t * 0.55) * 0.035;
+      renderer.render(scene, camera);
+    };
+    const syncLoop = () => {
+      if (reduced || !inView || document.hidden) {
+        renderer.setAnimationLoop(null);
+        draw(0);
+      } else {
+        renderer.setAnimationLoop(draw);
+      }
+    };
+    const onPointerMove = (event) => {
+      const rect = host.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      target.x = THREE.MathUtils.clamp((event.clientX - rect.left) / rect.width - 0.5, -0.5, 0.5);
+      target.y = THREE.MathUtils.clamp((event.clientY - rect.top) / rect.height - 0.5, -0.5, 0.5);
+    };
+    const onPointerLeave = () => { target.x = 0; target.y = 0; };
+    const onMotionChange = (event) => { reduced = event.matches; syncLoop(); };
+    const onVisibility = () => syncLoop();
     const observer = new ResizeObserver(resize);
     observer.observe(canvas);
     resize();
-
-    const motionQuery = window.matchMedia?.("(prefers-reduced-motion: reduce)");
-    const render = (time = 0) => {
-      const seconds = time / 1000;
-      vault.rotation.y = seconds * 0.12;
-      vault.rotation.x = Math.sin(seconds * 0.2) * 0.055;
-      coin.rotation.z = Math.sin(seconds * 0.32) * 0.035;
-      ringA.rotation.z = 0.28 + Math.sin(seconds * 0.22) * 0.07;
-      ringB.rotation.y = 0.6 + seconds * 0.055;
-      group.position.y = Math.sin(seconds * 0.45) * 0.07;
-      stars.rotation.y = seconds * 0.008;
-      renderer.render(scene, camera);
-    };
-    let shouldReduceMotion = motionQuery?.matches ?? false;
-    const syncAnimation = () => {
-      if (shouldReduceMotion || document.hidden) {
-        renderer.setAnimationLoop(null);
-        render();
-      } else {
-        renderer.setAnimationLoop(render);
-      }
-    };
-    const onMotionChange = (event) => {
-      shouldReduceMotion = event.matches;
-      syncAnimation();
-    };
-    const onVisibilityChange = () => syncAnimation();
+    host.addEventListener("pointermove", onPointerMove, { passive: true });
+    host.addEventListener("pointerleave", onPointerLeave);
+    const viewObserver = "IntersectionObserver" in window ? new IntersectionObserver(([entry]) => {
+      inView = entry.isIntersecting;
+      syncLoop();
+    }) : null;
+    viewObserver?.observe(host);
     if (motionQuery?.addEventListener) motionQuery.addEventListener("change", onMotionChange);
     else motionQuery?.addListener?.(onMotionChange);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    syncAnimation();
+    document.addEventListener("visibilitychange", onVisibility);
+    syncLoop();
 
     return () => {
       observer.disconnect();
+      viewObserver?.disconnect();
+      host.removeEventListener("pointermove", onPointerMove);
+      host.removeEventListener("pointerleave", onPointerLeave);
       if (motionQuery?.removeEventListener) motionQuery.removeEventListener("change", onMotionChange);
       else motionQuery?.removeListener?.(onMotionChange);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
+      document.removeEventListener("visibilitychange", onVisibility);
       renderer.setAnimationLoop(null);
       scene.traverse((object) => {
         if (object.geometry) object.geometry.dispose();
-        if (Array.isArray(object.material)) object.material.forEach((material) => material.dispose());
-        else object.material?.dispose();
+        if (Array.isArray(object.material)) object.material.forEach((item) => item.dispose());
+        else if (object.material) object.material.dispose();
       });
       renderer.dispose();
     };
   }, []);
 
-  return <canvas ref={canvasRef} className="escrow-scene" aria-hidden="true"/>;
+  return available
+    ? <canvas ref={canvasRef} className="escrow-scene" aria-hidden="true"/>
+    : <div className="scene-fallback" aria-hidden="true"><LockKeyhole size={30}/></div>;
 }
