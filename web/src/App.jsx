@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrowserProvider, Contract, isAddress, parseEther } from "ethers";
 import { ArrowLeftRight, BriefcaseBusiness, Clock3, LayoutDashboard, LogOut, Plus, RefreshCw, Scale, WalletCards } from "lucide-react";
-import abiFile from "./FreelanceEscrow.abi.json";
+import { abi as escrowAbi } from "./FreelanceEscrow.abi.js";
 import { CHAIN_ID, CONTRACT_ADDRESS, DEPLOYMENT_BLOCK, EXPLORER } from "./config.js";
 import { Welcome, RolePicker, Dashboard, CreateJobForm, JobDetail, DisputeList, ActivityList, NavItem } from "./Sections.jsx";
 
-const EVENT_LABEL = { JobCreated: "สร้างงาน", PaymentDeposited: "ฝากเงิน", WorkSubmitted: "ส่งผลงาน", DisputeRaised: "เปิดข้อพิพาท", DisputeEvidenceAdded: "เพิ่มหลักฐาน", DisputeResolved: "ตัดสินข้อพิพาท", PaymentReleased: "จ่ายให้ฟรีแลนซ์", PaymentRefunded: "คืนเงินผู้ว่าจ้าง" };
+const EVENT_LABEL = { JobCreated: "สร้างงาน", MilestoneCreated: "สร้าง Milestone", PaymentDeposited: "ฝากเงินงวด", WorkSubmitted: "ส่งผลงานงวด", DisputeRaised: "เปิดข้อพิพาท", DisputeEvidenceAdded: "เพิ่มหลักฐาน", DisputeResolved: "ตัดสินข้อพิพาท", MilestonePaymentReleased: "จ่ายเงินงวด", MilestonePaymentRefunded: "คืนเงินงวด" };
 const short = (value = "") => typeof value === "string" && value ? `${value.slice(0, 7)}…${value.slice(-5)}` : "—";
 const errText = (error) => error?.code === 4001 || error?.info?.error?.code === 4001 ? "ยกเลิกคำขอใน MetaMask แล้ว" : error?.shortMessage || error?.reason || error?.info?.error?.message || error?.message || "เกิดข้อผิดพลาด กรุณาลองอีกครั้ง";
 const go = (path) => { window.location.hash = path; };
@@ -59,7 +59,14 @@ export default function App() {
       const first = Math.max(1, total - 199);
       const rows = total ? await Promise.all(Array.from({ length: total - first + 1 }, (_, index) => first + index).map(async (jobId) => {
         const item = await activeContract.getJob(jobId);
-        return { id: jobId, employer: item.employer, freelancer: item.freelancer, title: item.title, description: item.description, amount: item.amount, deadline: item.deadline, status: Number(item.status), escrowBalance: item.escrowBalance, workReference: item.workReference, submittedAt: item.submittedAt, disputeReason: item.disputeReason, disputeEvidence: item.disputeEvidence, disputeOpenedBy: item.disputeOpenedBy, resolutionReason: item.resolutionReason };
+        const milestoneCount = Number(item.milestoneCount);
+        const milestones = await Promise.all(Array.from({ length: milestoneCount }, (_, index) => index + 1).map(async (milestoneId) => {
+          const milestone = await activeContract.getMilestone(jobId, milestoneId);
+          return { id: milestoneId, title: milestone.title, description: milestone.description, amount: milestone.amount, deadline: milestone.deadline, status: Number(milestone.status), escrowBalance: milestone.escrowBalance, workReference: milestone.workReference, submittedAt: milestone.submittedAt, disputeReason: milestone.disputeReason, disputeEvidence: milestone.disputeEvidence, disputeOpenedBy: milestone.disputeOpenedBy, resolutionReason: milestone.resolutionReason };
+        }));
+        const rawStatus = Number(await activeContract.getJobStatus(jobId));
+        const status = rawStatus === 4 && item.completedCount === 0n ? 4 : rawStatus - 1;
+        return { id: jobId, employer: item.employer, freelancer: item.freelancer, title: item.title, description: item.description, amount: item.totalAmount, deadline: milestones.reduce((latest, milestone) => milestone.deadline > latest ? milestone.deadline : latest, 0n), status, escrowBalance: milestones.reduce((sum, milestone) => sum + milestone.escrowBalance, 0n), milestones };
       })) : [];
       if (epoch !== sessionEpoch.current) return;
       setJobs(rows.reverse());
@@ -69,8 +76,8 @@ export default function App() {
           return logs.map((log) => {
             const args = log.args;
             const accountAddress = [args?.employer, args?.freelancer, args?.openedBy, args?.submittedBy].find((value) => typeof value === "string" && isAddress(value)) || "";
-            const amount = args?.amount ?? (["PaymentDeposited", "PaymentReleased", "PaymentRefunded"].includes(name) ? args?.[2] : null);
-            return { name, label, jobId: String(args?.jobId ?? args?.[0] ?? ""), account: accountAddress, amount, reason: args?.reason ?? "", evidence: args?.evidence ?? "", decision: args?.decision ?? null, hash: log.transactionHash, block: log.blockNumber };
+            const amount = args?.amount ?? null;
+            return { name, label, jobId: String(args?.jobId ?? args?.[0] ?? ""), milestoneId: String(args?.milestoneId ?? args?.[1] ?? ""), account: accountAddress, amount, reason: args?.reason ?? "", evidence: args?.evidence ?? "", decision: args?.decision ?? null, hash: log.transactionHash, block: log.blockNumber };
           });
         } catch {
           return [];
@@ -124,7 +131,7 @@ export default function App() {
         return;
       }
       const signer = await p.getSigner();
-      const activeContract = new Contract(CONTRACT_ADDRESS, abiFile.abi, signer);
+      const activeContract = new Contract(CONTRACT_ADDRESS, escrowAbi, signer);
       const adminAddress = await activeContract.admin();
       if (epoch !== sessionEpoch.current || loggedOut.current) return;
       setContract(activeContract);
@@ -263,32 +270,33 @@ export default function App() {
   const goSection = (nextSection) => go(nextSection === "dashboard" ? `/${activeMode}` : `/${activeMode}/${nextSection}`);
   const visibleJobs = useMemo(() => {
     if (!connected || !activeMode) return [];
-    const filtered = activeMode === "admin" ? jobs.filter((item) => item.status === 3) : jobs.filter((item) => (activeMode === "employer" ? item.employer : item.freelancer).toLowerCase() === account.toLowerCase());
+    const filtered = activeMode === "admin" ? jobs.filter((item) => item.status === 1) : jobs.filter((item) => (activeMode === "employer" ? item.employer : item.freelancer).toLowerCase() === account.toLowerCase());
     return filter === "all" ? filtered : filtered.filter((item) => item.status === Number(filter));
   }, [connected, jobs, activeMode, account, filter]);
 
   const createJob = async (form) => {
     if (isAdmin) { setError("Admin ไม่สามารถเป็นผู้ว่าจ้างหรือฟรีแลนซ์ได้ตามเงื่อนไข Contract"); return; }
     if (!isAddress(form.freelancer)) { setError("Address ฟรีแลนซ์ไม่ถูกต้อง"); return; }
-    if (!form.title.trim() || !form.description.trim() || !form.deadline) { setError("กรอกข้อมูลให้ครบ"); return; }
+    if (!form.title.trim() || !form.description.trim()) { setError("กรอกข้อมูลงานให้ครบ"); return; }
     if (form.freelancer.toLowerCase() === account.toLowerCase()) { setError("Address ฟรีแลนซ์ต้องไม่ใช่ผู้ว่าจ้าง"); return; }
     if (form.freelancer.toLowerCase() === admin.toLowerCase()) { setError("Address ฟรีแลนซ์ต้องไม่ใช่ Wallet Admin"); return; }
     try {
-      const value = parseEther(form.amount);
-      const deadline = Math.floor(new Date(form.deadline).getTime() / 1000);
-      const success = await tx("สร้างงาน", (activeContract) => activeContract.createJob(form.title.trim(), form.description.trim(), value, deadline, form.freelancer));
+      if (!Array.isArray(form.milestones) || form.milestones.length < 2 || form.milestones.length > 5) { setError("กำหนด Milestone ตั้งแต่ 2 ถึง 5 งวด"); return; }
+      const milestones = form.milestones.map((milestone) => ({ title: milestone.title.trim(), description: milestone.description.trim(), amount: parseEther(milestone.amount), deadline: BigInt(Math.floor(new Date(milestone.deadline).getTime() / 1000)) }));
+      if (milestones.some((milestone) => !milestone.title || !milestone.description || milestone.amount <= 0n || milestone.deadline <= BigInt(Math.floor(Date.now() / 1000)))) { setError("ตรวจข้อมูลและ deadline ของแต่ละ Milestone"); return; }
+      const success = await tx("สร้างงาน", (activeContract) => activeContract.createJob(form.title.trim(), form.description.trim(), form.freelancer, milestones));
       if (success) goSection("dashboard");
     } catch (formError) {
       setError(errText(formError));
     }
   };
 
-  const doDeposit = (item) => tx("ฝากค่าจ้าง", (activeContract) => activeContract.depositPayment(item.id, { value: item.amount }));
-  const doSubmit = (item, reference) => tx("ส่งผลงาน", (activeContract) => activeContract.submitWork(item.id, reference));
-  const doRelease = (item) => tx("อนุมัติและจ่าย", (activeContract) => activeContract.approveAndRelease(item.id));
-  const doRaise = (item, reason, evidence) => tx("เปิดข้อพิพาท", (activeContract) => activeContract.raiseDispute(item.id, reason, evidence));
-  const doEvidence = (item, evidence) => tx("เพิ่มหลักฐาน", (activeContract) => activeContract.addDisputeEvidence(item.id, evidence));
-  const doResolve = (item, decision, reason) => tx("ตัดสินข้อพิพาท", (activeContract) => activeContract.resolveDispute(item.id, decision, reason));
+  const doDeposit = (item, milestone) => tx("ฝากค่าจ้างงวด", (activeContract) => activeContract.depositMilestonePayment(item.id, milestone.id, { value: milestone.amount }));
+  const doSubmit = (item, milestone, reference) => tx("ส่งผลงานงวด", (activeContract) => activeContract.submitMilestoneWork(item.id, milestone.id, reference));
+  const doRelease = (item, milestone) => tx("อนุมัติและจ่ายงวด", (activeContract) => activeContract.approveMilestoneAndRelease(item.id, milestone.id));
+  const doRaise = (item, milestone, reason, evidence) => tx("เปิดข้อพิพาทงวด", (activeContract) => activeContract.raiseMilestoneDispute(item.id, milestone.id, reason, evidence));
+  const doEvidence = (item, milestone, evidence) => tx("เพิ่มหลักฐาน", (activeContract) => activeContract.addMilestoneDisputeEvidence(item.id, milestone.id, evidence));
+  const doResolve = (item, milestone, decision, reason) => tx("ตัดสินข้อพิพาทงวด", (activeContract) => activeContract.resolveMilestoneDispute(item.id, milestone.id, decision, reason));
 
   const title = route === "/" ? "เชื่อมต่อเพื่อเริ่มใช้งาน" : route === "/roles" ? "เลือก Role" : section === "create" ? "สร้างงานใหม่" : section === "disputes" ? "ข้อพิพาท" : section === "history" ? "ประวัติธุรกรรม" : id ? "รายละเอียดงาน" : "แดชบอร์ด";
   const roleName = activeMode === "admin" ? "ผู้ดูแลระบบ" : activeMode === "freelancer" ? "ฟรีแลนซ์" : activeMode === "employer" ? "ผู้ว่าจ้าง" : "เลือก Role";
@@ -335,7 +343,7 @@ export default function App() {
         {hasWorkspace && section === "dashboard" && routeRole === activeMode && <Dashboard mode={activeMode} jobs={visibleJobs} loading={loading} filter={filter} setFilter={setFilter} onJob={(number) => goSection("job/" + number)} onCreate={() => goSection("create")}/>}
         {hasWorkspace && section === "create" && routeRole === activeMode && activeMode === "employer" && <CreateJobForm enabled={connected && correctNetwork && activeMode === "employer" && !isAdmin} busy={busy} account={account} onSubmit={createJob}/>}
         {hasWorkspace && id && section === "job" && routeRole === activeMode && <JobDetail job={job} loading={loading} mode={activeMode} account={account} isAdmin={isAdmin} enabled={connected && correctNetwork} busy={busy} events={events.filter((event) => event.jobId === id)} onBack={() => goSection("dashboard")} onDeposit={doDeposit} onSubmit={doSubmit} onRelease={doRelease} onRaise={doRaise} onEvidence={doEvidence} onResolve={doResolve}/>}
-        {hasWorkspace && section === "disputes" && routeRole === activeMode && <DisputeList jobs={jobs.filter((item) => item.status === 3 && (activeMode === "admin" ? isAdmin : [item.employer, item.freelancer].some((address) => address.toLowerCase() === account.toLowerCase())))} mode={activeMode} isAdmin={isAdmin} onJob={(number) => goSection("job/" + number)}/>}
+        {hasWorkspace && section === "disputes" && routeRole === activeMode && <DisputeList jobs={jobs.flatMap((job) => job.milestones.filter((milestone) => milestone.status === 3 && (activeMode === "admin" ? isAdmin : [job.employer, job.freelancer].some((address) => address.toLowerCase() === account.toLowerCase()))).map((milestone) => ({ ...job, milestoneId: milestone.id, milestoneTitle: milestone.title, disputeReason: milestone.disputeReason, disputeOpenedBy: milestone.disputeOpenedBy, escrowBalance: milestone.escrowBalance })))} mode={activeMode} isAdmin={isAdmin} onJob={(number) => goSection("job/" + number)}/>}
         {hasWorkspace && section === "history" && routeRole === activeMode && <ActivityList events={events}/>}
         {hasWorkspace && routeRole === activeMode && !["dashboard", "create", "job", "disputes", "history"].includes(section) && <Dashboard mode={activeMode} jobs={visibleJobs} loading={loading} filter={filter} setFilter={setFilter} onJob={(number) => goSection("job/" + number)} onCreate={() => goSection("create")}/>}
       </div>

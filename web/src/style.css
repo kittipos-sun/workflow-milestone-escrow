@@ -178,15 +178,16 @@ svg{flex:none}
 .job-status{padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600}
 .job-status i,.large-status i,.status-3 i,.docket-status i{display:inline-block;width:6px;height:6px;flex:none;border-radius:50%;background:currentColor}
 .status-0{color:var(--amber-dark)}
-.status-1{color:var(--blue-dark)}
-.status-2{color:#6c5b9b}
+.status-1{color:var(--red)}
+.status-2{color:var(--green)}
 .status-3{color:var(--red)}
 .status-4{color:var(--green)}
 .status-5{color:var(--slate)}
 .job-status.status-0,.large-status.status-0{background:var(--amber-soft)}
-.job-status.status-1,.large-status.status-1{background:var(--blue-soft)}
-.job-status.status-2,.large-status.status-2{background:#f0edf7}
-.job-status.status-3,.large-status.status-3{background:var(--red-soft)}
+.job-status.status-1,.large-status.status-1{background:var(--red-soft)}
+.job-status.status-2,.large-status.status-2{background:var(--green-soft)}
+.job-status.status-3,.large-status.status-3{color:var(--slate);background:#e9eef0}
+.job-status.status-4,.large-status.status-4{color:var(--slate);background:#e9eef0}
 .job-status.status-4,.large-status.status-4{background:var(--green-soft)}
 .job-status.status-5,.large-status.status-5{background:#e9eef0}
 .docket-status{display:inline-flex;align-items:center;gap:7px;font-size:12.1px;font-weight:600}
@@ -525,9 +526,13 @@ svg{flex:none}
 .overview-value{border-color:var(--line)}
 .overview-value>strong{color:var(--ink)}
 .docket-row:hover,.case-row:hover{background:rgba(67,127,171,.1)}
-.status-2{color:#d1b8ff}
+.status-1{color:#ff9b8e}
+.status-2{color:#8bd3a3}
+.job-status.status-1,.large-status.status-1{background:#382522}
+.job-status.status-2,.large-status.status-2{background:#193528}
+.job-status.status-3,.large-status.status-3{color:#a9bac9;background:#222e3a}
+.job-status.status-4,.large-status.status-4{color:#a9bac9;background:#222e3a}
 .status-5{color:#a9bac9}
-.job-status.status-2,.large-status.status-2{background:#2b2440}
 .job-status.status-5,.large-status.status-5{background:#222e3a}
 .connected-address{border-color:rgba(255,214,123,.58);background:#172230}
 .role-option:hover:not(:disabled),.role-option.selected{background:#121e2c}
